@@ -1,5 +1,8 @@
 {
   "name": "course",
   "version": "0.0.4",
-  "description": "course protobuf"
+  "description": "course protobuf",
+  "dependencies": {
+    "core": "^0.0.4"
+  }
 }

@@ -1,0 +1,58 @@
+#!/bin/bash -x
+
+
+          current_branch_name="main"
+          echo "INFO: Branch name: ${current_branch_name}"
+          independent_packages="["
+          dependent_packages="["
+          lerna_tree=$(npx lerna list -a --toposort --graph | jq -rec)
+          echo "INFO: lerna_tree: $lerna_tree"
+          graduate_packages=""
+          while IFS= read -r package; do
+            echo "INFO: Run build for $package"
+            graduate_packages="${graduate_packages}$package,"
+            for key in $(echo "$lerna_tree" | jq -rec 'keys[]'); do
+              # echo "INFO: Working with tree package: $key"
+              if [[ "${package}" == "$key" ]]; then
+                length_pack=$(echo "$lerna_tree" | jq -rec '."'"${key}"'"' | jq length)
+                if [[ $length_pack -ge 1 ]]; then
+                  dependent_packages="${dependent_packages}{\"project\":\"${key}\"},"
+                else
+                  independent_packages="${independent_packages}{\"project\":\"${key}\"},"
+                fi
+                break
+              fi
+            done
+          done <<< $(npx lerna updated -a --json --toposort | jq -rec ".[].name")
+          independent_packages="${independent_packages}]"
+          dependent_packages="${dependent_packages}]"
+          independent_packages=$(echo "${independent_packages}" | sed 's/\(.*\),/\1/')
+          dependent_packages=$(echo "${dependent_packages}" | sed 's/\(.*\),/\1/')
+          graduate_packages=$(echo "${graduate_packages}" | sed 's/\(.*\),/\1/')
+          independent_length=$(echo "${independent_packages}" | jq '. | length')
+          dependent_length=$(echo "${dependent_packages}" | jq '. | length')
+          echo "INFO: Independent packages to build: ${independent_packages}"
+          echo "INFO: Dependent packages to build: ${dependent_packages}"
+          echo "INFO: Independent packages length: ${independent_length}"
+          echo "INFO: Dependent packages length: ${dependent_length}"
+          echo "INFO: Work with publish"
+          if [[ "${current_branch_name}" == "main" ]]; then
+         echo   npx lerna publish --conventional-commits \
+                              --yes \
+                              --no-verify-access \
+                              --no-changelog \
+                              --conventional-graduate="${graduate_packages}"
+          else
+         echo   npx lerna publish --conventional-commits \
+                              --yes \
+                              --no-verify-access \
+                              --no-changelog \
+                              --include-merged-tags \
+                              --conventional-prerelease
+          fi
+          echo "INFO: Export outputs"
+          echo "::set-output name=matrix_independent::${independent_packages}"
+          echo "::set-output name=matrix_dependent::${dependent_packages}"
+          echo "::set-output name=independent_length::${independent_length}"
+          echo "::set-output name=dependent_length::${dependent_length}"
+
